@@ -5,6 +5,7 @@ using System.Linq;
 using JetBrains.Application.DataContext;
 using JetBrains.Application.UI.ActionSystem.ActionsRevised.Menu;
 using JetBrains.DocumentModel.DataContext;
+using JetBrains.ProjectModel;
 using JetBrains.ReSharper.Feature.Services.Actions;
 using JetBrains.ReSharper.Psi.Files;
 using JetBrains.ReSharper.UnitTestFramework.Actions;
@@ -60,6 +61,18 @@ public static class Extensions
                 {
                     return true;
                 }
+            }
+        }
+
+        // Fall back to the received maps Verify writes to disk. A single test can leave many received
+        // files (for example one Verify call per endpoint via Task.WhenAll, or a loop that aggregates
+        // the failures), but the exception only carries the first pair, or is not a VerifyException at
+        // all. The maps record every received file with its verified target, independent of exceptions.
+        foreach (var file in context.GetReceivedMaps())
+        {
+            if (File.Exists(file.Received))
+            {
+                return true;
             }
         }
 
@@ -160,5 +173,78 @@ public static class Extensions
                 "\n\nNote that you might need to rerun tests before your changes take effect.");
             return default;
         }
+    }
+
+    public static IReadOnlyList<IUnitTestElement> GetContextElements(this IDataContext context)
+    {
+        var session = context.GetData(UnitTestDataConstants.Session.CURRENT);
+        if (session == null)
+        {
+            return Array.Empty<IUnitTestElement>();
+        }
+
+        var elements = context.GetData(UnitTestDataConstants.Elements.IN_CONTEXT)?.Criterion.Evaluate();
+        if (elements == null)
+        {
+            return Array.Empty<IUnitTestElement>();
+        }
+
+        return elements.ToList();
+    }
+
+    // Reads the received maps Verify writes to the intermediate (obj) directory of each project in
+    // context. Unlike the exception message, these cover every received file a test left on disk, so
+    // a test that produces many snapshots can be accepted as a whole. Each returned pair is one whose
+    // received file still exists (ReceivedMaps drops stale records), deduplicated by received path.
+    public static IReadOnlyList<FilePair> GetReceivedMaps(this IDataContext context)
+    {
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var element in context.GetContextElements())
+        {
+            var directory = element.GetProjectDirectory();
+            if (directory != null)
+            {
+                directories.Add(directory);
+            }
+        }
+
+        if (directories.Count == 0)
+        {
+            return Array.Empty<FilePair>();
+        }
+
+        var pairs = new List<FilePair>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var directory in directories)
+        {
+            foreach (var pair in ReceivedMaps.Read(directory).Pairs)
+            {
+                if (seen.Add(pair.Received))
+                {
+                    pairs.Add(pair);
+                }
+            }
+        }
+
+        return pairs;
+    }
+
+    // The project directory holds the obj directory the maps are written under. ReceivedMaps.Read
+    // scans it recursively, so the exact intermediate path does not need to be known here.
+    private static string GetProjectDirectory(this IUnitTestElement element)
+    {
+        var project = element.GetProjectFiles()?.FirstOrDefault()?.GetProject();
+        if (project == null)
+        {
+            return null;
+        }
+
+        var location = project.Location;
+        if (location.IsEmpty)
+        {
+            return null;
+        }
+
+        return location.FullPath;
     }
 }

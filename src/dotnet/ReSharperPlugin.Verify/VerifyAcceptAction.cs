@@ -5,6 +5,7 @@ using JetBrains.Application.UI.Actions;
 using JetBrains.Application.UI.ActionsRevised.Menu;
 using JetBrains.Application.UI.ActionSystem.ActionsRevised.Menu;
 using JetBrains.ReSharper.UnitTestFramework.Execution;
+using VerifyTests.ExceptionParsing;
 #if RESHARPER
 using JetBrains.ReSharper.UnitTestExplorer.Session.Actions;
 using JetBrains.ReSharper.UnitTestFramework.UI.Session.Actions;
@@ -36,24 +37,57 @@ public abstract class VerifyAcceptActionBase :
     public virtual void Execute(IDataContext context, DelegateExecute nextExecute)
     {
         var resultManager = context.GetComponent<IUnitTestResultManager>();
-        foreach (var (result, element) in context.GetVerifyResults())
+
+        var accepted = false;
+
+        foreach (var (result, _) in context.GetVerifyResults())
         {
             foreach (var file in result.New.Concat(result.NotEqual))
             {
-                if (File.Exists(file.Verified))
-                {
-                    File.Delete(file.Verified);
-                }
-
-                File.Move(file.Received, file.Verified);
+                accepted |= Accept(file);
             }
 
             foreach (var file in result.Delete)
             {
-                File.Delete(file);
+                if (File.Exists(file))
+                {
+                    File.Delete(file);
+                    accepted = true;
+                }
             }
-
-            resultManager.MarkOutdated(element);
         }
+
+        // Accept any remaining snapshots recorded in Verify's received maps. A single test can leave
+        // many received files (one per Verify call), while the exception yields only the first pair,
+        // or none when the test aggregates its failures. The maps capture every received file with its
+        // verified target. Pairs already accepted above are skipped, since their received file is gone.
+        foreach (var file in context.GetReceivedMaps())
+        {
+            accepted |= Accept(file);
+        }
+
+        if (accepted)
+        {
+            foreach (var element in context.GetContextElements())
+            {
+                resultManager.MarkOutdated(element);
+            }
+        }
+    }
+
+    private static bool Accept(FilePair file)
+    {
+        if (!File.Exists(file.Received))
+        {
+            return false;
+        }
+
+        if (File.Exists(file.Verified))
+        {
+            File.Delete(file.Verified);
+        }
+
+        File.Move(file.Received, file.Verified);
+        return true;
     }
 }
