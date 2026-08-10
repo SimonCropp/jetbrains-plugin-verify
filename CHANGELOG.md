@@ -4,10 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## 2026.1.0
-- Added support for ReSharper and Rider 2026.1
+## 2026.2.0
+- Added support for ReSharper and Rider 2026.2
 - Fixed detection of Verify failures for frameworks running on Microsoft.Testing.Platform without a dedicated Rider adapter (e.g. TUnit), where the exception type is unavailable and the message may carry a category label prefix
 - Accept received now handles tests that produce multiple snapshots (for example one `Verify` call per item via `Task.WhenAll`, or a loop that aggregates failures), by reading the received map files Verify writes to the intermediate (obj) directory
+
+## 2026.1.0
+- Added support for ReSharper and Rider 2026.1
 
 ## 2025.3.0
 - Added support for ReSharper and Rider 2025.3
