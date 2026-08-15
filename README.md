@@ -19,7 +19,7 @@
 
 ## Customization
 
-By default, Verify will open the diff tool automatically when a test fails. If you prefer using this plugin to review failed tests, you can set the `DiffEngine_Disabled` environment variable to `true` in the Unit Test Runner options:
+By default, Verify will open the diff tool automatically when a test fails. If you prefer using this plugin to review failed tests, you can set the `DiffEngine_Disabled` environment variable to `true` in the Unit Test Runner options. Note that this also switches off the routes [inline snapshots](#inline-snapshots) reach these actions through, so leave it unset when using those:
 
 - ReSharper: Options -> Tools -> Unit Testing -> Test Runner
 - Rider: Settings -> Build, Execution, Deployment -> Unit Testing -> Test Runner
@@ -35,8 +35,9 @@ of in a `.verified.` file. _Accept Received_ and _Compare Received/Verified_ han
 
 - _Accept Received_ splices the new snapshot into the source file, preserving its encoding, BOM and
   line endings. A test that also produces `.verified.` files has both accepted in the one action.
-- _Compare Received/Verified_ shows the received text against the snapshot the source file currently
-  holds.
+- _Compare Received/Verified_ shows the received text against the snapshot the test run was measured
+  against — what the source file held when the test ran, which is not the same as what it holds now
+  if it has been edited since.
 
 Requires Verify 32 or later.
 
@@ -50,7 +51,9 @@ file no matter how many surfaces are open.
 
 If nothing owns the queue — no viewer could be resolved, or `DiffEngine_InlineViewer` is `false` —
 Verify stages the snapshot under the test project's intermediate (`obj`) directory instead, and
-these actions fall back to that, applying the patch themselves.
+these actions fall back to that, applying the patch themselves. Staging needs the test project to be
+consuming Verify's build props, which is what tells Verify where that directory is; without it there
+is nothing to fall back to.
 
 `DiffEngine_Disabled` switches off both routes, so an inline snapshot is then neither queued nor
 staged and there is nothing for these actions to work with. It still behaves as documented above for
