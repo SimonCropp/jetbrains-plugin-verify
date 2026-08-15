@@ -40,13 +40,18 @@ of in a `.verified.` file. _Accept Received_ and _Compare Received/Verified_ han
 
 Requires Verify 32 or later.
 
-A pending inline snapshot is handed to [DiffEngineViewer](https://github.com/VerifyTests/DiffEngine/blob/main/docs/viewer.md),
-which owns the review and writes nothing to disk. Only when no viewer can be resolved does Verify
-stage the snapshot under the test project's intermediate (`obj`) directory, and that staged snapshot
-is what these actions act on. So to review inline snapshots here rather than in a viewer window, set
-the `DiffEngine_InlineViewer` environment variable to `false`, in the same Unit Test Runner options
-as above.
+A pending inline snapshot lives in the inline queue, held by whichever process owns it —
+[DiffEngineTray](https://github.com/VerifyTests/DiffEngine/blob/main/docs/tray.md), or the
+[DiffEngineViewer](https://github.com/VerifyTests/DiffEngine/blob/main/docs/viewer.md) a test run
+launches. This plugin is a third surface onto that same queue, so no configuration is needed: accept
+here or accept in the viewer, whichever is in front of you, and both agree about what is still
+pending. Accepting asks the owner to write the source file, which is what keeps a single writer per
+file no matter how many surfaces are open.
 
-`DiffEngine_Disabled` cannot be used for this: it switches off the staging along with the viewer,
-leaving these actions nothing to act on. A failing inline snapshot therefore still opens the
-configured diff tool, and this plugin is what accepts it.
+If nothing owns the queue — no viewer could be resolved, or `DiffEngine_InlineViewer` is `false` —
+Verify stages the snapshot under the test project's intermediate (`obj`) directory instead, and
+these actions fall back to that, applying the patch themselves.
+
+`DiffEngine_Disabled` switches off both routes, so an inline snapshot is then neither queued nor
+staged and there is nothing for these actions to work with. It still behaves as documented above for
+`.verified.` files.

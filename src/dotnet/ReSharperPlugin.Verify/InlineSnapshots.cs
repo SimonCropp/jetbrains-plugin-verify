@@ -11,37 +11,97 @@ using VerifyTests.ExceptionParsing;
 /// `InlineNew:` and `InlineNotEqual:` sections of the exception message.
 /// </summary>
 /// <remarks>
-/// Accepting one rewrites the source file, which DiffEngine does through
-/// <see cref="InlineApplier" />. The patch describing that rewrite, along with the received and the
-/// expected text, is staged by the test run under the intermediate (obj) directory - but only when
-/// no DiffEngineViewer could be resolved, since a viewer owns the review when there is one. Set the
-/// `DiffEngine_InlineViewer` environment variable to `false` in the unit test runner options to
-/// review inline snapshots here instead of in a viewer window.
+/// A pending one lives in the inline queue, held by whichever process owns it: DiffEngineTray, or
+/// the DiffEngineViewer a test run launched. This plugin is a third surface onto that same queue,
+/// reached through <see cref="InlineQueueClient" />. Accepting asks the owner to splice the
+/// snapshot into the source, which is what keeps one writer per file and leaves every display
+/// agreeing about what is still pending.
+/// <para>
+/// Only when no owner answers does a test run stage the patch, and the received and expected text,
+/// under the intermediate (obj) directory. That is the fallback these actions drop to, and the one
+/// case where the source rewrite happens here.
+/// </para>
 /// </remarks>
 public static class InlineSnapshots
 {
     public static IEnumerable<InlineEntry> InlineEntries(this Result result) =>
         result.InlineNew.Concat(result.InlineNotEqual);
 
-    // The staged patch is what an accept applies, so an entry without one is not pending here: it
-    // was handed to a viewer, which owns it.
-    public static bool CanAccept(this InlineEntry entry) =>
+    /// <summary>
+    /// How the queue addresses this call site.
+    /// </summary>
+    public static string Key(this InlineEntry entry) =>
+        InlineKey.For(entry.SourceFile, entry.Line);
+
+    public static bool CanAccept(this InlineEntry entry, InlineLookup lookup) =>
+        lookup.IsQueued(entry) ||
+        entry.HasStagedPatch();
+
+    public static bool CanCompare(this InlineEntry entry, InlineLookup lookup) =>
+        lookup.IsQueued(entry) ||
+        entry.HasStagedText();
+
+    /// <summary>
+    /// Puts the snapshot in the source file. Returns true when it is there afterwards, whether this
+    /// call put it there or an earlier one did.
+    /// </summary>
+    public static bool TryAccept(InlineEntry entry, InlineLookup lookup, ICollection<string> failures)
+    {
+        if (lookup.IsQueued(entry))
+        {
+            var outcome = InlineQueueClient.Accept(entry.Key(), out var message);
+            if (outcome == InlineAcceptOutcome.Accepted)
+            {
+                // The owner applied it and dropped the entry. Nothing to settle, and nothing staged
+                // to clean up: a run whose patch the owner took writes no files.
+                return true;
+            }
+
+            if (outcome == InlineAcceptOutcome.Failed)
+            {
+                failures.Add($"{Describe(entry)}: {message}");
+                return false;
+            }
+
+            // Unknown: the owner went away between the listing and the accept. Whatever the run
+            // staged, if anything, is all that is left.
+        }
+
+        return TryAcceptStaged(entry, failures);
+    }
+
+    /// <summary>
+    /// The two texts to show: what the test produced against the snapshot the source file holds.
+    /// From the queue when an owner has it, and from the staged files otherwise.
+    /// </summary>
+    public static bool TryGetTexts(InlineEntry entry, InlineLookup lookup, out string received, out string expected)
+    {
+        if (lookup.Queued(entry) is { } pending)
+        {
+            return TryWriteTexts(entry, pending, out received, out expected);
+        }
+
+        received = entry.ReceivedPath;
+        expected = entry.ExpectedPath;
+        return entry.HasStagedText();
+    }
+
+    /// <summary>
+    /// The patch a run stages when no owner answered, which this plugin then applies itself.
+    /// </summary>
+    private static bool HasStagedPatch(this InlineEntry entry) =>
         entry.PatchPath != null &&
         File.Exists(entry.PatchPath);
 
-    public static bool CanCompare(this InlineEntry entry) =>
+    private static bool HasStagedText(this InlineEntry entry) =>
         entry.ReceivedPath != null &&
         entry.ExpectedPath != null &&
         File.Exists(entry.ReceivedPath) &&
         File.Exists(entry.ExpectedPath);
 
-    /// <summary>
-    /// Splices the new snapshot into the source file. Returns true when the source holds it
-    /// afterwards, whether this call put it there or an earlier one did.
-    /// </summary>
-    public static bool TryAccept(InlineEntry entry, ICollection<string> failures)
+    private static bool TryAcceptStaged(InlineEntry entry, ICollection<string> failures)
     {
-        if (!entry.CanAccept())
+        if (!entry.HasStagedPatch())
         {
             return false;
         }
@@ -52,15 +112,15 @@ public static class InlineSnapshots
             return false;
         }
 
-        // InlineApplier owns all locking, in process and cross process, so accepting alongside a
-        // DiffEngineTray or viewer doing the same is safe. No locking is added here.
+        // InlineApplier owns all locking, in process and cross process, so applying beside a tray or
+        // viewer doing the same is safe. No locking is added here.
         var result = InlineApplier.Apply(patch);
         switch (result.Status)
         {
             case InlineApplyStatus.Applied:
             case InlineApplyStatus.AlreadyApplied:
-                // The run that staged these files may also have queued the patch with whatever owns
-                // the inline queue, and that queue outlives the run. Without this the tray keeps
+                // The run that staged these files may still have queued the patch with an owner
+                // that arrived later, and that queue outlives the run. Without this a tray keeps
                 // offering a snapshot that is already in the source.
                 DiffRunner.SettleInline(patch.SourceFile, patch.LineHint);
                 DeleteStaged(entry);
@@ -73,6 +133,37 @@ public static class InlineSnapshots
             default:
                 failures.Add($"{Describe(entry)}: {result.Message}");
                 return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the queued entry's two texts out, since a queued snapshot is held in the owner's
+    /// memory and a diff view needs files. Named per call site rather than per invocation, so
+    /// comparing the same snapshot twice overwrites rather than accumulating.
+    /// </summary>
+    private static bool TryWriteTexts(InlineEntry entry, PendingInline pending, out string received, out string expected)
+    {
+        received = null;
+        expected = null;
+        try
+        {
+            // The same directory name the staged files sit under, which is what the Rider diff view
+            // reads to know it is looking at an inline snapshot rather than a verified file.
+            var directory = Path.Combine(Path.GetTempPath(), "VerifyInline");
+            Directory.CreateDirectory(directory);
+            var name = $"{Path.GetFileNameWithoutExtension(entry.SourceFile)}.{entry.Line}.{Hash(entry.Key())}";
+            received = Path.Combine(directory, $"{name}.received.txt");
+            expected = Path.Combine(directory, $"{name}.expected.txt");
+            File.WriteAllText(received, pending.Patch.NewContent);
+            // Null for a snapshot that has no literal yet, which is an empty pane rather than no
+            // comparison, exactly as a new file snapshot compares against an empty verified file.
+            File.WriteAllText(expected, pending.Patch.OriginalValue ?? string.Empty);
+            return true;
+        }
+        catch (Exception exception)
+            when (exception is IOException || exception is UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
@@ -105,6 +196,69 @@ public static class InlineSnapshots
         }
     }
 
+    /// <summary>
+    /// FNV-1a, for a file name that is the same every run without carrying a whole path in it.
+    /// </summary>
+    private static string Hash(string value)
+    {
+        var hash = 2166136261;
+        foreach (var character in value)
+        {
+            hash = (hash ^ character) * 16777619;
+        }
+
+        return hash.ToString("x8");
+    }
+
     private static string Describe(InlineEntry entry) =>
         $"{entry.SourceFile}({entry.Line})";
+}
+
+/// <summary>
+/// The pending inline snapshots, listed at most once for the action being run.
+/// <para>
+/// Listing is a loopback round trip, and both the menu update and the execute walk every entry in
+/// every selected test, so asking per entry would be a socket call per snapshot on a path that runs
+/// whenever the menu opens. Nothing is asked at all unless a verification actually reported an
+/// inline snapshot, which keeps a run of ordinary file snapshots off the socket entirely.
+/// </para>
+/// </summary>
+public sealed class InlineLookup
+{
+    private bool listedKeys;
+    private IReadOnlyList<string> keys;
+    private bool listedPending;
+    private IReadOnlyList<PendingInline> pending;
+
+    /// <summary>
+    /// Whether the owner holds this call site. Over the listing that carries no patches, since
+    /// this decides whether to offer an action rather than rendering anything, and it is the menu
+    /// update that asks it.
+    /// </summary>
+    public bool IsQueued(InlineEntry entry)
+    {
+        if (!listedKeys)
+        {
+            listedKeys = true;
+            InlineQueueClient.TryListKeys(out keys);
+        }
+
+        return keys.Contains(entry.Key());
+    }
+
+    /// <summary>
+    /// The entry with its patch, for when the snapshot itself is needed. A second round trip, paid
+    /// only by an action that is about to show the text.
+    /// </summary>
+    public PendingInline Queued(InlineEntry entry)
+    {
+        if (!listedPending)
+        {
+            listedPending = true;
+            InlineQueueClient.TryList(out pending);
+        }
+
+        var key = entry.Key();
+        return pending.FirstOrDefault(_ => _.Key == key);
+    }
 }

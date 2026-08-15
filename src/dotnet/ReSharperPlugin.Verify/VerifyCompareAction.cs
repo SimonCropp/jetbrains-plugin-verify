@@ -34,6 +34,7 @@ public class VerifyCompareAction :
 
     public void Execute(IDataContext context, DelegateExecute nextExecute)
     {
+        var lookup = new InlineLookup();
         foreach (var (result, element) in context.GetVerifyResults())
         {
             var files = result.New.Concat(result.NotEqual);
@@ -62,13 +63,13 @@ public class VerifyCompareAction :
                 }
             }
 
-            // An inline snapshot has no verified file. What stands in for one is the expected text
-            // the run staged, which is what the source file currently holds, and it is always text.
+            // An inline snapshot has no verified file. What stands in for one is the snapshot the
+            // source file holds, and it is always text.
             foreach (var entry in result.InlineEntries())
             {
-                if (entry.CanCompare())
+                if (InlineSnapshots.TryGetTexts(entry, lookup, out var received, out var expected))
                 {
-                    verifyTestsModel.Compare.Fire(new CompareData(presentation, entry.ReceivedPath, entry.ExpectedPath));
+                    verifyTestsModel.Compare.Fire(new CompareData(presentation, received, expected));
                 }
             }
 #else
@@ -84,9 +85,9 @@ public class VerifyCompareAction :
 
             foreach (var entry in result.InlineEntries())
             {
-                if (entry.CanCompare())
+                if (InlineSnapshots.TryGetTexts(entry, lookup, out var received, out var expected))
                 {
-                    DiffRunner.Launch(entry.ReceivedPath, entry.ExpectedPath);
+                    DiffRunner.Launch(received, expected);
                 }
             }
 #endif

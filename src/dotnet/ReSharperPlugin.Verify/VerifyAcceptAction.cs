@@ -42,6 +42,7 @@ public abstract class VerifyAcceptActionBase :
 
         var accepted = false;
         var failures = new List<string>();
+        var lookup = new InlineLookup();
 
         foreach (var (result, _) in context.GetVerifyResults())
         {
@@ -63,7 +64,7 @@ public abstract class VerifyAcceptActionBase :
             // text into that file rather than moving a received file over a verified one.
             foreach (var entry in result.InlineEntries())
             {
-                accepted |= InlineSnapshots.TryAccept(entry, failures);
+                accepted |= InlineSnapshots.TryAccept(entry, lookup, failures);
             }
         }
 

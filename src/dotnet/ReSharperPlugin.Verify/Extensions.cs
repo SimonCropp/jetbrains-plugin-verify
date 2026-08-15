@@ -29,6 +29,7 @@ public static class Extensions
 
     public static bool HasPendingCompare(this IDataContext context)
     {
+        var lookup = new InlineLookup();
         foreach (var (result, _) in context.GetVerifyResults())
         {
             foreach (var file in result.New.Concat(result.NotEqual))
@@ -39,11 +40,11 @@ public static class Extensions
                 }
             }
 
-            // An inline snapshot has no received file: the received and expected text are staged
-            // under the intermediate (obj) directory instead.
+            // An inline snapshot has no received file. The two texts are in the inline queue, or
+            // staged under the intermediate (obj) directory when nothing owns one.
             foreach (var entry in result.InlineEntries())
             {
-                if (entry.CanCompare())
+                if (entry.CanCompare(lookup))
                 {
                     return true;
                 }
@@ -55,6 +56,7 @@ public static class Extensions
 
     public static bool HasPendingAccept(this IDataContext context)
     {
+        var lookup = new InlineLookup();
         foreach (var (result, _) in context.GetVerifyResults())
         {
             foreach (var file in result.New.Concat(result.NotEqual))
@@ -73,11 +75,11 @@ public static class Extensions
                 }
             }
 
-            // An inline snapshot is accepted by rewriting the test source file, which is described
-            // by the patch the run staged.
+            // An inline snapshot is accepted by rewriting the test source file, which the queue
+            // owner does on request, or which this plugin does itself from a staged patch.
             foreach (var entry in result.InlineEntries())
             {
-                if (entry.CanAccept())
+                if (entry.CanAccept(lookup))
                 {
                     return true;
                 }
