@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using JetBrains.Application.DataContext;
@@ -5,6 +6,7 @@ using JetBrains.Application.UI.Actions;
 using JetBrains.Application.UI.ActionsRevised.Menu;
 using JetBrains.Application.UI.ActionSystem.ActionsRevised.Menu;
 using JetBrains.ReSharper.UnitTestFramework.Execution;
+using JetBrains.Util;
 using VerifyTests.ExceptionParsing;
 #if RESHARPER
 using JetBrains.ReSharper.UnitTestExplorer.Session.Actions;
@@ -39,6 +41,7 @@ public abstract class VerifyAcceptActionBase :
         var resultManager = context.GetComponent<IUnitTestResultManager>();
 
         var accepted = false;
+        var failures = new List<string>();
 
         foreach (var (result, _) in context.GetVerifyResults())
         {
@@ -54,6 +57,13 @@ public abstract class VerifyAcceptActionBase :
                     File.Delete(file);
                     accepted = true;
                 }
+            }
+
+            // An inline snapshot lives in the test source file, so accepting it splices the new
+            // text into that file rather than moving a received file over a verified one.
+            foreach (var entry in result.InlineEntries())
+            {
+                accepted |= InlineSnapshots.TryAccept(entry, failures);
             }
         }
 
@@ -72,6 +82,11 @@ public abstract class VerifyAcceptActionBase :
             {
                 resultManager.MarkOutdated(element);
             }
+        }
+
+        if (failures.Count > 0)
+        {
+            MessageBox.ShowError(string.Join("\n\n", failures));
         }
     }
 

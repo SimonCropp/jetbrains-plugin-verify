@@ -24,7 +24,16 @@ class CompareManager(project: Project) : LifetimedProjectComponent(project) {
 
             receivedContent.putUserData(DiffUserDataKeys.FORCE_READ_ONLY, true)
 
-            val request = SimpleDiffRequest(compareData.testName, receivedContent, verifiedContent, "Received", "Verified")
+            // An inline snapshot lives in the test source file, so the file on the right is only the
+            // copy of it that Verify staged for review, under the intermediate (obj) directory.
+            // Editing that copy would change nothing, so it is read only and titled for what it is.
+            val isInline = verifiedFile.parentFile?.name == "VerifyInline"
+            if (isInline) {
+                verifiedContent.putUserData(DiffUserDataKeys.FORCE_READ_ONLY, true)
+            }
+
+            val expectedTitle = if (isInline) "Expected" else "Verified"
+            val request = SimpleDiffRequest(compareData.testName, receivedContent, verifiedContent, "Received", expectedTitle)
             DiffManager.getInstance().showDiff(project, request)
         }
     }

@@ -26,3 +26,27 @@ By default, Verify will open the diff tool automatically when a test fails. If y
 
 ![ReSharper Settings](doc/env-settings-resharper.png)
 ![Rider Settings](doc/env-settings-rider.png)
+
+## Inline snapshots
+
+[Inline snapshots](https://github.com/VerifyTests/Verify/blob/main/docs/inline-snapshots.md) keep the
+expected text in the test source file, as a string literal beside the code that produces it, instead
+of in a `.verified.` file. _Accept Received_ and _Compare Received/Verified_ handle those too:
+
+- _Accept Received_ splices the new snapshot into the source file, preserving its encoding, BOM and
+  line endings. A test that also produces `.verified.` files has both accepted in the one action.
+- _Compare Received/Verified_ shows the received text against the snapshot the source file currently
+  holds.
+
+Requires Verify 32 or later.
+
+A pending inline snapshot is handed to [DiffEngineViewer](https://github.com/VerifyTests/DiffEngine/blob/main/docs/viewer.md),
+which owns the review and writes nothing to disk. Only when no viewer can be resolved does Verify
+stage the snapshot under the test project's intermediate (`obj`) directory, and that staged snapshot
+is what these actions act on. So to review inline snapshots here rather than in a viewer window, set
+the `DiffEngine_InlineViewer` environment variable to `false`, in the same Unit Test Runner options
+as above.
+
+`DiffEngine_Disabled` cannot be used for this: it switches off the staging along with the viewer,
+leaving these actions nothing to act on. A failing inline snapshot therefore still opens the
+configured diff tool, and this plugin is what accepts it.

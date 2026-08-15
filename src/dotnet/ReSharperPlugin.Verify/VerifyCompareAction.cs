@@ -47,7 +47,7 @@ public class VerifyCompareAction :
                     continue;
                 }
 
-                if (EmptyFiles.FileExtensions.IsText(file.Received))
+                if (EmptyFiles.FileExtensions.IsTextFile(file.Received))
                 {
                     if (!File.Exists(file.Verified))
                     {
@@ -61,6 +61,16 @@ public class VerifyCompareAction :
                     DiffRunner.Launch(file.Received, file.Verified);
                 }
             }
+
+            // An inline snapshot has no verified file. What stands in for one is the expected text
+            // the run staged, which is what the source file currently holds, and it is always text.
+            foreach (var entry in result.InlineEntries())
+            {
+                if (entry.CanCompare())
+                {
+                    verifyTestsModel.Compare.Fire(new CompareData(presentation, entry.ReceivedPath, entry.ExpectedPath));
+                }
+            }
 #else
             foreach (var file in files)
             {
@@ -70,6 +80,14 @@ public class VerifyCompareAction :
                 }
 
                 DiffRunner.Launch(file.Received, file.Verified);
+            }
+
+            foreach (var entry in result.InlineEntries())
+            {
+                if (entry.CanCompare())
+                {
+                    DiffRunner.Launch(entry.ReceivedPath, entry.ExpectedPath);
+                }
             }
 #endif
         }

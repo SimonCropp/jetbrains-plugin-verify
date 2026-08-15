@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 2026.2.1
+- Added support for [inline snapshots](https://github.com/VerifyTests/Verify/blob/main/docs/inline-snapshots.md): accepting one splices the new snapshot into the test source file, and comparing shows the received text against the snapshot that source file holds. Requires Verify 32 or later
+
 ## 2026.2.0
 - Added support for ReSharper and Rider 2026.2
 - Fixed detection of Verify failures for frameworks running on Microsoft.Testing.Platform without a dedicated Rider adapter (e.g. TUnit), where the exception type is unavailable and the message may carry a category label prefix

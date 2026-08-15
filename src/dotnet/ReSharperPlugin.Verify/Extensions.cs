@@ -38,6 +38,16 @@ public static class Extensions
                     return true;
                 }
             }
+
+            // An inline snapshot has no received file: the received and expected text are staged
+            // under the intermediate (obj) directory instead.
+            foreach (var entry in result.InlineEntries())
+            {
+                if (entry.CanCompare())
+                {
+                    return true;
+                }
+            }
         }
 
         return false;
@@ -58,6 +68,16 @@ public static class Extensions
             foreach (var file in result.Delete)
             {
                 if (File.Exists(file))
+                {
+                    return true;
+                }
+            }
+
+            // An inline snapshot is accepted by rewriting the test source file, which is described
+            // by the patch the run staged.
+            foreach (var entry in result.InlineEntries())
+            {
+                if (entry.CanAccept())
                 {
                     return true;
                 }
