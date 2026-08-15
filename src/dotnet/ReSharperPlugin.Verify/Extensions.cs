@@ -137,7 +137,20 @@ public static class Extensions
         }
     }
 
-    public static IEnumerable<(Result, IUnitTestElement)> GetVerifyResults(this IDataContext context)
+    /// <summary>
+    /// Every parsed Verify failure in context.
+    /// </summary>
+    /// <param name="parseFailures">
+    /// Where a message that could not be parsed is reported, or null to say nothing about it.
+    /// <para>
+    /// Null from the menu update, which runs every time the menu opens: a parse failure used to
+    /// raise a modal dialog from there, so a single unreadable message put one in front of the
+    /// user on every right click, over and over, with no way to act on it. An execute passes a
+    /// collection, since that is a click that is about to do nothing and the reason is worth
+    /// having.
+    /// </para>
+    /// </param>
+    public static IEnumerable<(Result, IUnitTestElement)> GetVerifyResults(this IDataContext context, ICollection<string> parseFailures = null)
     {
         var session = context.GetData(UnitTestDataConstants.Session.CURRENT);
         if (session == null)
@@ -161,7 +174,7 @@ public static class Extensions
                 continue;
             }
 
-            var parsed = result.GetParseResult();
+            var parsed = result.GetParseResult(parseFailures);
             if (!parsed.Equals(default(Result)))
             {
                 yield return (parsed, element);
@@ -187,7 +200,7 @@ public static class Extensions
         return TryGetVerifyMessage(info.Message) != null;
     }
 
-    private static Result GetParseResult(this UnitTestResultData result)
+    private static Result GetParseResult(this UnitTestResultData result, ICollection<string> parseFailures)
     {
         var rawMessage = result.GetExceptionInfo(0).Message!;
         var message = TryGetVerifyMessage(rawMessage) ?? rawMessage;
@@ -197,14 +210,25 @@ public static class Extensions
         }
         catch (Exception exception)
         {
-            MessageBox.ShowError(
+            parseFailures?.Add(
                 exception.Message +
                 "\n\nNote that you might need to rerun tests before your changes take effect.");
             return default;
         }
     }
 
-    private static readonly string[] sectionMarkers = { "New:", "NotEqual:", "Equal:", "Delete:" };
+    // The inline headers are listed in their own right, since an inline only failure carries no
+    // file sections at all. They matched anyway - "InlineNew:" contains "New:" - but by accident
+    // of how they happen to be spelled, which is not something to rest a payload check on
+    private static readonly string[] sectionMarkers =
+    {
+        "New:",
+        "NotEqual:",
+        "Equal:",
+        "Delete:",
+        "InlineNew:",
+        "InlineNotEqual:"
+    };
 
     /// <summary>
     /// Normalises a test failure message down to the raw <c>VerifyException</c> payload that

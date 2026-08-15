@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using System.Linq;
 using JetBrains.Application.DataContext;
 using JetBrains.Application.UI.Actions;
 using JetBrains.Application.UI.ActionsRevised.Menu;
 using JetBrains.Application.UI.ActionSystem.ActionsRevised.Menu;
+using JetBrains.Util;
 using System.IO;
 using DiffEngine;
 #if RESHARPER
@@ -35,7 +37,10 @@ public class VerifyCompareAction :
     public void Execute(IDataContext context, DelegateExecute nextExecute)
     {
         var lookup = new InlineLookup();
-        foreach (var (result, element) in context.GetVerifyResults())
+        // A message that would not parse, and a conflict the diff cannot show. Collected rather
+        // than raised as each is found, so several selected tests produce one dialog
+        var notes = new List<string>();
+        foreach (var (result, element) in context.GetVerifyResults(notes))
         {
             var files = result.New.Concat(result.NotEqual);
 #if RIDER
@@ -67,7 +72,7 @@ public class VerifyCompareAction :
             // source file holds, and it is always text.
             foreach (var entry in result.InlineEntries())
             {
-                if (InlineSnapshots.TryGetTexts(entry, lookup, out var received, out var expected))
+                if (InlineSnapshots.TryGetTexts(entry, lookup, notes, out var received, out var expected))
                 {
                     verifyTestsModel.Compare.Fire(new CompareData(presentation, received, expected));
                 }
@@ -85,12 +90,17 @@ public class VerifyCompareAction :
 
             foreach (var entry in result.InlineEntries())
             {
-                if (InlineSnapshots.TryGetTexts(entry, lookup, out var received, out var expected))
+                if (InlineSnapshots.TryGetTexts(entry, lookup, notes, out var received, out var expected))
                 {
                     DiffRunner.Launch(received, expected);
                 }
             }
 #endif
+        }
+
+        if (notes.Count > 0)
+        {
+            MessageBox.ShowError(string.Join("\n\n", notes));
         }
     }
 }

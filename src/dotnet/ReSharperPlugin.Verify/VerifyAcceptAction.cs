@@ -44,7 +44,7 @@ public abstract class VerifyAcceptActionBase :
         var failures = new List<string>();
         var lookup = new InlineLookup();
 
-        foreach (var (result, _) in context.GetVerifyResults())
+        foreach (var (result, _) in context.GetVerifyResults(failures))
         {
             foreach (var file in result.New.Concat(result.NotEqual))
             {

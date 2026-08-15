@@ -24,6 +24,19 @@ using VerifyTests.ExceptionParsing;
 /// </remarks>
 public static class InlineSnapshots
 {
+    /// <summary>
+    /// The directory name an inline snapshot's two texts sit under.
+    /// </summary>
+    /// <remarks>
+    /// Load bearing in three repos and enforced by none of them: Verify stages under a directory
+    /// of this name, this plugin writes the queued texts to one so they look the same, and the
+    /// Rider frontend decides a diff is an inline snapshot - read only right pane, titled
+    /// "Expected" - by matching the parent directory name against it (CompareManager.kt). Renaming
+    /// it anywhere silently downgrades the diff rather than breaking anything. A field on
+    /// CompareData would carry it properly, which is a protocol change rather than a rename.
+    /// </remarks>
+    internal const string InlineDirectoryName = "VerifyInline";
+
     public static IEnumerable<InlineEntry> InlineEntries(this Result result) =>
         result.InlineNew.Concat(result.InlineNotEqual);
 
@@ -33,13 +46,17 @@ public static class InlineSnapshots
     public static string Key(this InlineEntry entry) =>
         InlineKey.For(entry.SourceFile, entry.Line);
 
+    // Staged files first, deliberately. Both of these run from the menu update, and asking the
+    // queue is a loopback round trip on the thread the menu is being built on, while asking the
+    // disk is not. Which of the two ends up doing the accept is decided in TryAccept, where the
+    // queue still comes first
     public static bool CanAccept(this InlineEntry entry, InlineLookup lookup) =>
-        lookup.IsQueued(entry) ||
-        entry.HasStagedPatch();
+        entry.HasStagedPatch() ||
+        lookup.IsQueued(entry);
 
     public static bool CanCompare(this InlineEntry entry, InlineLookup lookup) =>
-        lookup.IsQueued(entry) ||
-        entry.HasStagedText();
+        entry.HasStagedText() ||
+        lookup.IsQueued(entry);
 
     /// <summary>
     /// Puts the snapshot in the source file. Returns true when it is there afterwards, whether this
@@ -63,8 +80,16 @@ public static class InlineSnapshots
                 return false;
             }
 
-            // Unknown: the owner went away between the listing and the accept. Whatever the run
-            // staged, if anything, is all that is left.
+            // Unknown: the owner went away between the listing and the accept, or something else
+            // took the entry first. Whatever the run staged, if anything, is all that is left -
+            // and a run whose patch the owner took stages nothing, so usually there is nothing.
+            // Said out loud, because the click otherwise moved no file, changed no source and
+            // reported nothing at all
+            if (!entry.HasStagedPatch())
+            {
+                failures.Add($"{Describe(entry)}: the queue owner did not apply it. It may have been accepted elsewhere, or the owner may have exited, and the test run staged no patch to fall back on. Re-run the test if the snapshot is still pending.");
+                return false;
+            }
         }
 
         return TryAcceptStaged(entry, failures);
@@ -74,10 +99,18 @@ public static class InlineSnapshots
     /// The two texts to show: what the test produced against the snapshot the source file holds.
     /// From the queue when an owner has it, and from the staged files otherwise.
     /// </summary>
-    public static bool TryGetTexts(InlineEntry entry, InlineLookup lookup, out string received, out string expected)
+    public static bool TryGetTexts(InlineEntry entry, InlineLookup lookup, ICollection<string> notes, out string received, out string expected)
     {
         if (lookup.Queued(entry) is { } pending)
         {
+            // A multi-targeted run that disagreed with itself holds a variant per framework, and
+            // only the first is shown. Reviewing it and accepting was met with a refusal from the
+            // owner naming frameworks the diff never mentioned, so it is said here instead
+            if (pending.Conflicted)
+            {
+                notes?.Add($"{Describe(entry)}: conflicting snapshots ({pending.OriginsLabel}). The first is shown; resolve the conflict in the viewer before accepting.");
+            }
+
             return TryWriteTexts(entry, pending, out received, out expected);
         }
 
@@ -149,7 +182,7 @@ public static class InlineSnapshots
         {
             // The same directory name the staged files sit under, which is what the Rider diff view
             // reads to know it is looking at an inline snapshot rather than a verified file.
-            var directory = Path.Combine(Path.GetTempPath(), "VerifyInline");
+            var directory = Path.Combine(Path.GetTempPath(), InlineDirectoryName);
             Directory.CreateDirectory(directory);
             var name = $"{Path.GetFileNameWithoutExtension(entry.SourceFile)}.{entry.Line}.{Hash(entry.Key())}";
             received = Path.Combine(directory, $"{name}.received.txt");
