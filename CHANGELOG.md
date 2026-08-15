@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## 2026.2.1
+## 2026.3.0
 - Added support for [inline snapshots](https://github.com/VerifyTests/Verify/blob/main/docs/inline-snapshots.md): accepting one splices the new snapshot into the test source file, and comparing shows the received text against the snapshot that source file holds. Requires Verify 32 or later
 
 ## 2026.2.0
