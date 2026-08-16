@@ -27,17 +27,28 @@ public static class Extensions
         return CurrentPsiFileRequirement.FromDataContext(dataContext);
     }
 
+    /// <summary>
+    /// The pairs of a result whose received file is actually on disk, which is what "there is
+    /// something pending" means for a file snapshot.
+    /// <para>
+    /// One definition, because the menu update and the execute both need it and they have to agree:
+    /// an update that says yes to something the execute then skips is a menu item that does
+    /// nothing.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<FilePair> ReceivedFiles(this Result result) =>
+        result.New
+            .Concat(result.NotEqual)
+            .Where(_ => File.Exists(_.Received));
+
     public static bool HasPendingCompare(this IDataContext context)
     {
         var lookup = new InlineLookup();
         foreach (var (result, _) in context.GetVerifyResults())
         {
-            foreach (var file in result.New.Concat(result.NotEqual))
+            if (result.ReceivedFiles().Any())
             {
-                if (File.Exists(file.Received))
-                {
-                    return true;
-                }
+                return true;
             }
 
             // An inline snapshot has no received file. The two texts are in the inline queue, or
@@ -59,12 +70,9 @@ public static class Extensions
         var lookup = new InlineLookup();
         foreach (var (result, _) in context.GetVerifyResults())
         {
-            foreach (var file in result.New.Concat(result.NotEqual))
+            if (result.ReceivedFiles().Any())
             {
-                if (File.Exists(file.Received))
-                {
-                    return true;
-                }
+                return true;
             }
 
             foreach (var file in result.Delete)

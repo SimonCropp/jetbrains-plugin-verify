@@ -1,5 +1,5 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using JetBrains.Application.DataContext;
 using JetBrains.Application.UI.Actions;
 using JetBrains.Application.UI.ActionsRevised.Menu;
@@ -42,30 +42,32 @@ public class VerifyCompareAction :
         var notes = new List<string>();
         foreach (var (result, element) in context.GetVerifyResults(notes))
         {
-            var files = result.New.Concat(result.NotEqual);
 #if RIDER
             var verifyTestsModel = context.GetComponent<ISolution>().GetProtocolSolution().GetVerifyModel();
             var presentation = element.GetPresentation();
-            foreach (var file in files)
-            {
-                if (!File.Exists(file.Received))
-                {
-                    continue;
-                }
+            // Rider shows text in its own diff view and hands everything else to a diff tool
+            Action<string, string> showText = (left, right) =>
+                verifyTestsModel.Compare.Fire(new CompareData(presentation, left, right));
+#else
+            Action<string, string> showText = (left, right) => DiffRunner.Launch(left, right);
+#endif
 
+            foreach (var file in result.ReceivedFiles())
+            {
+#if RIDER
                 if (EmptyFiles.FileExtensions.IsTextFile(file.Received))
                 {
+                    // The diff view needs two files, and a new snapshot has no verified one yet
                     if (!File.Exists(file.Verified))
                     {
                         File.WriteAllText(file.Verified, "");
                     }
 
-                    verifyTestsModel.Compare.Fire(new CompareData(presentation, file.Received, file.Verified));
+                    showText(file.Received, file.Verified);
+                    continue;
                 }
-                else
-                {
-                    DiffRunner.Launch(file.Received, file.Verified);
-                }
+#endif
+                DiffRunner.Launch(file.Received, file.Verified);
             }
 
             // An inline snapshot has no verified file. What stands in for one is the snapshot the
@@ -74,28 +76,9 @@ public class VerifyCompareAction :
             {
                 if (InlineSnapshots.TryGetTexts(entry, lookup, notes, out var received, out var expected))
                 {
-                    verifyTestsModel.Compare.Fire(new CompareData(presentation, received, expected));
+                    showText(received, expected);
                 }
             }
-#else
-            foreach (var file in files)
-            {
-                if (!File.Exists(file.Received))
-                {
-                    continue;
-                }
-
-                DiffRunner.Launch(file.Received, file.Verified);
-            }
-
-            foreach (var entry in result.InlineEntries())
-            {
-                if (InlineSnapshots.TryGetTexts(entry, lookup, notes, out var received, out var expected))
-                {
-                    DiffRunner.Launch(received, expected);
-                }
-            }
-#endif
         }
 
         if (notes.Count > 0)

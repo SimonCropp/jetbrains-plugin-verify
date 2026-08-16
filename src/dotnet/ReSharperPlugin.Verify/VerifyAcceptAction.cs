@@ -46,7 +46,7 @@ public abstract class VerifyAcceptActionBase :
 
         foreach (var (result, _) in context.GetVerifyResults(failures))
         {
-            foreach (var file in result.New.Concat(result.NotEqual))
+            foreach (var file in result.ReceivedFiles())
             {
                 accepted |= Accept(file);
             }
