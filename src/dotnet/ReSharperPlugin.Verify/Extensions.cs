@@ -43,7 +43,7 @@ public static class Extensions
 
     public static bool HasPendingCompare(this IDataContext context)
     {
-        var lookup = new InlineLookup();
+        var lookup = context.GetInlineLookup();
         foreach (var (result, _) in context.GetVerifyResults())
         {
             if (result.ReceivedFiles().Any())
@@ -67,7 +67,7 @@ public static class Extensions
 
     public static bool HasPendingAccept(this IDataContext context)
     {
-        var lookup = new InlineLookup();
+        var lookup = context.GetInlineLookup();
         foreach (var (result, _) in context.GetVerifyResults())
         {
             if (result.ReceivedFiles().Any())
@@ -320,16 +320,7 @@ public static class Extensions
     // received file still exists (ReceivedMaps drops stale records), deduplicated by received path.
     public static IReadOnlyList<FilePair> GetReceivedMaps(this IDataContext context)
     {
-        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var element in context.GetContextElements())
-        {
-            var directory = element.GetProjectDirectory();
-            if (directory != null)
-            {
-                directories.Add(directory);
-            }
-        }
-
+        var directories = context.GetProjectDirectories();
         if (directories.Count == 0)
         {
             return Array.Empty<FilePair>();
@@ -349,6 +340,34 @@ public static class Extensions
         }
 
         return pairs;
+    }
+
+    /// <summary>
+    /// Where the inline snapshots of the tests in context are looked for.
+    /// </summary>
+    /// <remarks>
+    /// One per action rather than one per entry, since it caches a socket listing and a directory
+    /// scan that every entry would otherwise repeat.
+    /// </remarks>
+    public static InlineLookup GetInlineLookup(this IDataContext context) =>
+        new(context.GetProjectDirectories());
+
+    // The projects the tests in context live in, which is as much of the disk as any of this has
+    // business reading: a received map and a staged inline patch both sit in the intermediate (obj)
+    // directory of the project that produced them.
+    public static IReadOnlyCollection<string> GetProjectDirectories(this IDataContext context)
+    {
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var element in context.GetContextElements())
+        {
+            var directory = element.GetProjectDirectory();
+            if (directory != null)
+            {
+                directories.Add(directory);
+            }
+        }
+
+        return directories;
     }
 
     // The project directory holds the obj directory the maps are written under. ReceivedMaps.Read

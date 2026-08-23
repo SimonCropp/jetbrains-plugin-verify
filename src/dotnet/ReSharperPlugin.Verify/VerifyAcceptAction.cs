@@ -42,7 +42,7 @@ public abstract class VerifyAcceptActionBase :
 
         var accepted = false;
         var failures = new List<string>();
-        var lookup = new InlineLookup();
+        var lookup = context.GetInlineLookup();
 
         foreach (var (result, _) in context.GetVerifyResults(failures))
         {

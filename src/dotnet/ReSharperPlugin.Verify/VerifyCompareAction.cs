@@ -36,7 +36,7 @@ public class VerifyCompareAction :
 
     public void Execute(IDataContext context, DelegateExecute nextExecute)
     {
-        var lookup = new InlineLookup();
+        var lookup = context.GetInlineLookup();
         // A message that would not parse, and a conflict the diff cannot show. Collected rather
         // than raised as each is found, so several selected tests produce one dialog
         var notes = new List<string>();

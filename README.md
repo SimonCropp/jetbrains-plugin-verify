@@ -55,6 +55,12 @@ these actions fall back to that, applying the patch themselves. Staging needs th
 consuming Verify's build props, which is what tells Verify where that directory is; without it there
 is nothing to fall back to.
 
+A queue owner that exits while snapshots are still pending writes them out to the same place, so
+closing the tray or the viewer without reviewing does not lose them. These actions find those too,
+by scanning the projects the selected tests live in. Where a multi-targeted run left one snapshot
+per framework and the frameworks disagree, accepting is refused rather than picking one that was
+never shown; re-run the tests, or resolve it in the viewer.
+
 `DiffEngine_Disabled` switches off both routes, so an inline snapshot is then neither queued nor
 staged and there is nothing for these actions to work with. It still behaves as documented above for
 `.verified.` files.
