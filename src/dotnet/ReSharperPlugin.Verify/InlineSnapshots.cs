@@ -194,13 +194,13 @@ public static class InlineSnapshots
                 // arrived later, and that queue outlives the run. Without this a tray keeps
                 // offering a snapshot that is already in the source.
                 //
-                // Retire rather than settle: SettleInline stamps the running process's own
+                // The applied verb, not SettleInline: that one stamps the running process's own
                 // framework as the origin, and that is this IDE backend rather than the test run,
-                // so it names a framework no entry was ever labelled with and the owner strips
-                // nothing. Retire carries no origin, which drops the whole entry - and that is what
-                // is wanted anyway, since every variant of this call site was anchored to the
-                // literal the source no longer holds.
-                DiffRunner.RetireInline(patch.SourceFile, patch.LineHint, patch.MemberName);
+                // so it names a framework no entry was ever labelled with, the owner strips
+                // nothing, and the miss says nothing. This one carries no framework, which drops
+                // the whole entry - right here, since every variant of this call site was anchored
+                // to the literal the source no longer holds.
+                DiffRunner.SettleAppliedInline(patch);
                 ClearStaged(entry, patch.SourceFile, patch.LineHint, patch.MemberName);
                 return true;
 
