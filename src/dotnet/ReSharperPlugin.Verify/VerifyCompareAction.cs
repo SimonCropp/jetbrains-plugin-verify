@@ -47,7 +47,7 @@ public class VerifyCompareAction :
                     continue;
                 }
 
-                if (EmptyFiles.FileExtensions.IsText(file.Received))
+                if (EmptyFiles.FileExtensions.IsTextFile(file.Received))
                 {
                     if (!File.Exists(file.Verified))
                     {
