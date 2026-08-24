@@ -11,6 +11,7 @@
     <PackageReference Include="JetBrains.ReSharper.SDK.Tests" Version="$(SdkVersion)" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="6.2.0" />
+    <PackageReference Update="DiffEngine" Version="20.0.0-beta.33" />
   </ItemGroup>
 
   <ItemGroup>
