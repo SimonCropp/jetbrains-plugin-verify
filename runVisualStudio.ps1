@@ -1,4 +1,4 @@
-Param(
+﻿Param(
     $RootSuffix = "Verify",
     $Version = "9999.0.0"
 )
@@ -9,6 +9,31 @@ $PSScriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent
 Set-Location $PSScriptRoot
 
 . ".\settings.ps1"
+
+# Visual Studio. Only this script needs one - it installs a ReSharper experimental hive into an
+# installation and then launches devenv against it - so the lookup lives here rather than in
+# settings.ps1, where every script that dot-sourced it paid for a dependency it did not have.
+#
+# Matched by devenv.exe rather than by "-products *", which is not the question "where is Visual
+# Studio". Other Microsoft installers register through the same setup API and come back from it:
+# SQL Server Management Studio 22 reports channelId "SSMS.22.SSMS.Release" and version 22.8.x, so
+# it matched "Release", sorted above Visual Studio's 17.x, and won. Build Tools is returned too and
+# has no IDE to launch. What this script wants is an installation it can start, so that is what is
+# looked for.
+$VsWhereOutput = [xml] (& "$PSScriptRoot\tools\vswhere.exe" -format xml -products *)
+$VisualStudio = $VsWhereOutput.instances.instance |
+    Where-Object { $_.channelId -match "Release" } |
+    Where-Object { Test-Path "$($_.installationPath)\Common7\IDE\devenv.exe" } |
+    Sort-Object -Property installationVersion |
+    Select-Object -Last 1
+
+if (-Not $VisualStudio) {
+    throw "No Visual Studio installation with devenv.exe was found. This script installs a ReSharper experimental hive and launches it, so it needs Visual Studio rather than Build Tools. Use buildPlugin.ps1 to build without one."
+}
+
+$VisualStudioMajorVersion = ($VisualStudio.installationVersion -split '\.')[0]
+$VisualStudioInstanceId = $VisualStudio.instanceId
+$DevEnvPath = "$($VisualStudio.installationPath)\Common7\IDE\devenv.exe"
 
 $UserProjectXmlFile = "$SourceBasePath\$PluginId\$PluginId.csproj.user"
 
@@ -75,7 +100,7 @@ if (!(Test-Path "$UserProjectXmlFile")) {
     # Install plugin
     $PluginRepository = "$env:LOCALAPPDATA\JetBrains\plugins"
     Remove-Item "$PluginRepository\${PluginId}.${Version}" -Recurse -ErrorAction Ignore
-    Invoke-Exe $MSBuildPath "/t:Restore;Rebuild;Pack" "$SolutionPath" "/v:minimal" "/p:PackageVersion=$Version" "/p:PackageOutputPath=`"$OutputDirectory`""
+    Invoke-DotNetPack "-p:PackageVersion=$Version" "-p:PackageOutputPath=$OutputDirectory"
     Invoke-Exe $NuGetPath install $PluginId -OutputDirectory "$PluginRepository" -Source "$OutputDirectory" -DependencyVersion Ignore
 
     Write-Output "Re-installing experimental hive"
@@ -84,5 +109,5 @@ if (!(Test-Path "$UserProjectXmlFile")) {
     Write-Warning "Plugin is already installed. To trigger reinstall, delete $UserProjectXmlFile."
 }
 
-Invoke-Exe $MSBuildPath "/t:Restore;Rebuild" "$SolutionPath" "/v:minimal"
+Invoke-DotNetBuild
 Invoke-Exe $DevEnvPath "/rootSuffix $RootSuffix" "/ReSharper.Internal" "/ReSharper.LogFile $PSScriptRoot\ReSharper.log" "/ReSharper.LogLevel Trace"

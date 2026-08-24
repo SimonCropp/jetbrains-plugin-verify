@@ -2,20 +2,29 @@ $PluginId = "ReSharperPlugin.Verify"
 $SolutionPath = "$PSScriptRoot\ReSharperPlugin.Verify.slnx"
 $SourceBasePath = "$PSScriptRoot\src\dotnet"
 
-$VsWhereOutput = [xml] (& "$PSScriptRoot\tools\vswhere.exe" -format xml -products *)
-$VisualStudio = $VsWhereOutput.instances.instance |
-    Where-Object { $_.channelId -match "Release" } |
-    Sort-Object -Property installationVersion |
-    Select-Object -Last 1
-
-$VisualStudioBaseDirectory = $VisualStudio.installationPath
-$VisualStudioMajorVersion = ($VisualStudio.installationVersion -split '\.')[0]
-$VisualStudioInstanceId = $VisualStudio.instanceId
-$DevEnvPath = Get-ChildItem "$VisualStudioBaseDirectory\*\IDE\devenv.exe"
-$MSBuildPath = Get-ChildItem "$VisualStudioBaseDirectory\MSBuild\*\Bin\MSBuild.exe"
-
 $OutputDirectory = "$PSScriptRoot\output"
 $NuGetPath = "$PSScriptRoot\tools\nuget.exe"
+
+# `dotnet build` and `dotnet pack`, not Visual Studio's MSBuild. Visual Studio's cannot restore
+# these projects: every one is skipped with NU1503, "the project file may be invalid or missing
+# targets required for restore", and the build then fails having restored nothing. The .NET SDK is
+# already required here, since the solution is an SDK one, and it restores on the way in - so
+# neither of these needs a Restore step of its own.
+Function Invoke-DotNetBuild {
+    param(
+        [Parameter(ValueFromRemainingArguments=$true)][String[]] $Arguments
+    )
+
+    Invoke-Exe "dotnet" "build" "$SolutionPath" "-v:minimal" @Arguments
+}
+
+Function Invoke-DotNetPack {
+    param(
+        [Parameter(ValueFromRemainingArguments=$true)][String[]] $Arguments
+    )
+
+    Invoke-Exe "dotnet" "pack" "$SolutionPath" "-v:minimal" @Arguments
+}
 
 Function Invoke-Exe {
     param(

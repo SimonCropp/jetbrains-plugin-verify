@@ -1,5 +1,4 @@
 import com.jetbrains.plugin.structure.base.utils.isFile
-import groovy.ant.FileNameFinder
 import org.apache.tools.ant.taskdefs.condition.Os
 import org.jetbrains.intellij.platform.gradle.Constants
 
@@ -47,46 +46,33 @@ sourceSets {
     }
 }
 
-var buildToolExecutable: String? = null
-var buildToolArgs: List<String>? = null
-
-val setBuildTool by tasks.registering {
-    doLast {
-        var executable = "dotnet"
-        var args = mutableListOf("msbuild")
-
-        if (isWindows) {
-            val execResult = providers.exec {
-                executable("${rootDir}\\tools\\vswhere.exe")
-                args("-latest", "-property", "installationPath", "-products", "*")
-                workingDir(rootDir)
-            }
-
-            val directory = execResult.standardOutput.asText.get().trim()
-            if (directory.isNotEmpty()) {
-                val files = FileNameFinder().getFileNames("${directory}\\MSBuild", "**/MSBuild.exe")
-                executable = files.get(0)
-                args = mutableListOf("/v:minimal")
-            }
-        }
-
-        args.add(DotnetSolution)
-        args.add("/p:Configuration=${BuildConfiguration}")
-        args.add("/p:HostFullIdentifier=")
-
-        buildToolExecutable = executable
-        buildToolArgs = args
-    }
-}
+// What `dotnet build` and `dotnet pack` are both given: which solution, which configuration, and
+// the empty HostFullIdentifier that keeps a ReSharper host out of the plugin build.
+//
+// The .NET SDK on every OS. Windows used to hunt for Visual Studio's MSBuild with vswhere, which
+// was wrong twice over. "-products *" is not the question "where is MSBuild": other Microsoft
+// installers register through the same Visual Studio setup API and are returned by it, so SQL
+// Server Management Studio 22 answered it - version 22.8.x beats Visual Studio's 17.x under
+// -latest - and its cut-down MSBuild failed the build with a bare non-zero exit and nothing else.
+// Nor does picking the real Visual Studio help: its MSBuild cannot restore these projects at all,
+// skipping every one with NU1503 "the project file may be invalid or missing targets required for
+// restore". The SDK is already required here, since this is an SDK solution, and Visual Studio now
+// is not.
+val dotnetArgs = listOf(
+        DotnetSolution,
+        "--configuration", BuildConfiguration,
+        "-p:HostFullIdentifier=",
+        "-v:minimal",
+)
 
 val compileDotNet by tasks.registering {
-    dependsOn(setBuildTool)
     doLast {
-        val arguments = buildToolArgs!!.toMutableList()
-        arguments.add("/t:Restore;Rebuild")
         providers.exec {
-            executable(buildToolExecutable!!)
-            args(arguments)
+            executable("dotnet")
+            // `build` rather than msbuild /t:Restore;Rebuild - it restores on the way in, and is
+            // incremental where Rebuild always cleaned first. This task has no up-to-date check of
+            // its own, so it runs every time either way; incremental just makes the repeats cheap.
+            args(listOf("build") + dotnetArgs)
             workingDir(rootDir)
         }.result.get()
     }
@@ -116,14 +102,13 @@ tasks.buildPlugin {
             it.groups[1]!!.value.replace("(?s)- ".toRegex(), "\u2022 ").replace("`", "").replace(",", "%2C").replace(";", "%3B")
         }.take(1).joinToString()
 
-        val arguments = buildToolArgs!!.toMutableList()
-        arguments.add("/t:Pack")
-        arguments.add("/p:PackageOutputPath=${rootDir}/output")
-        arguments.add("/p:PackageReleaseNotes=${changeNotes}")
-        arguments.add("/p:PackageVersion=${version}")
         providers.exec {
-            executable(buildToolExecutable!!)
-            args(arguments)
+            executable("dotnet")
+            args(listOf("pack") + dotnetArgs + listOf(
+                    "-p:PackageOutputPath=${rootDir}/output",
+                    "-p:PackageReleaseNotes=${changeNotes}",
+                    "-p:PackageVersion=${version}",
+            ))
             workingDir(rootDir)
         }.result.get()
     }
