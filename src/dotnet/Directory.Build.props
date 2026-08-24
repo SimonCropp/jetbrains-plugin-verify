@@ -26,9 +26,9 @@
     <Reference Include="System.Xaml" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
 
-    <PackageReference Include="DiffEngine" Version="17.0.1" PrivateAssets="all" />
-    <PackageReference Include="EmptyFiles" Version="8.17.1" PrivateAssets="all" />
-    <PackageReference Include="Verify.ExceptionParsing" Version="31.27.0" PrivateAssets="all" />
+    <PackageReference Include="DiffEngine" Version="19.3.3" PrivateAssets="all" />
+    <PackageReference Include="EmptyFiles" Version="8.18.2" PrivateAssets="all" />
+    <PackageReference Include="Verify.ExceptionParsing" Version="31.28.0" PrivateAssets="all" />
     <PackageReference Include="System.Management" Version="10.0.0" PrivateAssets="all" />
     <PackageReference Include="System.Memory" Version="4.6.3" PrivateAssets="all" />
     <PackageReference Include="System.CodeDom" Version="10.0.0" PrivateAssets="all" />
