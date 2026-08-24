@@ -42,7 +42,7 @@ public class VerifyOpenAction :
 
         foreach (var file in files)
         {
-            editorManager.OpenFileAsync(file, OpenFileOptions.DefaultActivate);
+            _ = editorManager.OpenFileAsync(file, OpenFileOptions.DefaultActivate);
         }
 
         bool ShouldOpenFiles()
