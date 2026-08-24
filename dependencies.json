@@ -1,10 +1,10 @@
 [
   {
     "name": "DiffEngine",
-    "version": "20.0.0-beta.33",
+    "version": "20.0.0-beta.34",
     "url": "https://github.com/VerifyTests/DiffEngine",
     "license": "MIT",
-    "licenseUrl": "https://github.com/VerifyTests/DiffEngine/blob/20.0.0-beta.33/license.txt"
+    "licenseUrl": "https://github.com/VerifyTests/DiffEngine/blob/20.0.0-beta.34/license.txt"
   },
   {
     "name": "Verify.ExceptionParsing",
